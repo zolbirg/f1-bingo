@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F1 BINGO</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── LOGIN PAGE ──────────────────────────────────────────────────── -->
+  <div class="login-page" id="loginPage">
+
+    <div class="login-bg-glow"></div>
+
+    <div class="login-logo">
+      <span class="login-logo__flag">⚑</span>
+      <span class="login-logo__f1">F1</span>
+      <span class="login-logo__bingo">BINGO</span>
+    </div>
+    <div class="login-season">СЕЗОН 2026</div>
+
+    <div class="login-card">
+      <!-- Corner decorations -->
+      <span class="corner corner--tl"></span>
+      <span class="corner corner--tr"></span>
+      <span class="corner corner--bl"></span>
+      <span class="corner corner--br"></span>
+
+      <!-- Tabs -->
+      <div class="login-tabs">
+        <button class="login-tab login-tab--active" id="tabLogin" onclick="switchTab('login')">ВХОД</button>
+        <button class="login-tab" id="tabRegister" onclick="switchTab('register')">РЕГИСТРАЦИЯ</button>
+      </div>
+
+      <!-- Auth error -->
+      <div class="auth-error hidden" id="authError"></div>
+
+      <!-- Login form -->
+      <form class="auth-form" id="loginForm" onsubmit="handleEmailLogin(event)">
+        <div class="field-group">
+          <label class="field-label">EMAIL</label>
+          <div class="field-wrap">
+            <svg class="field-icon field-icon--left" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input class="field-input" id="loginEmail" type="email" placeholder="your@email.com" autocomplete="email" required />
+            <svg class="field-icon field-icon--right" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">ПАРОЛЬ</label>
+          <div class="field-wrap">
+            <svg class="field-icon field-icon--left" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input class="field-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" required />
+          </div>
+        </div>
+
+        <button class="btn btn--primary btn--full" type="submit" id="btnLogin">ВОЙТИ</button>
+      </form>
+
+      <!-- Register form (hidden by default) -->
+      <form class="auth-form hidden" id="registerForm" onsubmit="handleEmailRegister(event)">
+        <div class="field-group">
+          <label class="field-label">ИМЯ</label>
+          <div class="field-wrap">
+            <svg class="field-icon field-icon--left" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input class="field-input" id="regName" type="text" placeholder="Ваше имя" maxlength="30" required />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">EMAIL</label>
+          <div class="field-wrap">
+            <svg class="field-icon field-icon--left" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input class="field-input" id="regEmail" type="email" placeholder="your@email.com" autocomplete="email" required />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">ПАРОЛЬ</label>
+          <div class="field-wrap">
+            <svg class="field-icon field-icon--left" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input class="field-input" id="regPassword" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" required minlength="6" />
+          </div>
+        </div>
+
+        <button class="btn btn--primary btn--full" type="submit" id="btnRegister">СОЗДАТЬ АККАУНТ</button>
+      </form>
+
+      <!-- Divider -->
+      <div class="auth-divider"><span>ИЛИ</span></div>
+
+      <!-- Google button -->
+      <button class="btn btn--google btn--full" onclick="handleGoogleLogin()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        ВОЙТИ ЧЕРЕЗ GOOGLE
+      </button>
+
+      <p class="auth-hint">Быстрый вход через Google или email!</p>
+    </div>
+
+    <footer class="login-footer">© 2026 F1 Bingo &nbsp;•&nbsp; Неофициальная игра</footer>
+  </div>
+
+  <!-- ── MODE SELECTION ────────────────────────────────────────────── -->
+  <div class="mode-page hidden" id="modePage">
+
+    <header class="header">
+      <div class="header__logo">
+        <span class="header__logo-icon">⊳</span>
+        <span class="header__logo-text">F1 BINGO</span>
+      </div>
+      <nav class="header__nav">
+        <button class="nav-btn hidden admin-btn" id="adminBtnMode" onclick="toggleAdmin()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Админ
+        </button>
+        <div class="header__player-name" id="modePlayerName">—</div>
+        <button class="nav-btn nav-btn--icon" onclick="handleLogout()" title="Выйти">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <main class="mode-main">
+      <p class="mode-subtitle">ВЫБЕРИТЕ РЕЖИМ ИГРЫ</p>
+
+      <div class="mode-cards">
+
+        <div class="mode-card" onclick="selectMode('race')">
+          <div class="mode-card__corners">
+            <span class="corner corner--tl"></span>
+            <span class="corner corner--tr"></span>
+            <span class="corner corner--bl"></span>
+            <span class="corner corner--br"></span>
+          </div>
+          <div class="mode-card__icon">🏎</div>
+          <div class="mode-card__title">БИНГО ГОНКИ</div>
+          <div class="mode-card__grid-label">3 × 3</div>
+          <div class="mode-card__desc">Отмечай события одной гонки и собирай бинго!</div>
+          <div class="mode-card__action">ИГРАТЬ →</div>
+        </div>
+
+        <div class="mode-card" onclick="selectMode('season')">
+          <div class="mode-card__corners">
+            <span class="corner corner--tl"></span>
+            <span class="corner corner--tr"></span>
+            <span class="corner corner--bl"></span>
+            <span class="corner corner--br"></span>
+          </div>
+          <div class="mode-card__icon">🏆</div>
+          <div class="mode-card__title">БИНГО СЕЗОНА</div>
+          <div class="mode-card__grid-label">5 × 10</div>
+          <div class="mode-card__desc">Следи за событиями всего сезона на большой карточке!</div>
+          <div class="mode-card__action">ИГРАТЬ →</div>
+        </div>
+
+      </div>
+
+      <!-- ── F1 2026 Race Schedule ─────────────────────────────────── -->
+      <section class="schedule">
+        <div class="schedule__header">
+          <div class="schedule__f1-banner">
+            <div class="schedule__f1-chevrons" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="schedule__f1-wordmark">
+              <span class="schedule__f1-brand">F1</span>
+              <span class="schedule__f1-year-num">2026</span>
+            </div>
+          </div>
+        </div>
+        <div class="schedule__grid">
+
+          <!-- Left column: rounds 1–12 -->
+          <div class="schedule__col">
+            <div class="schedule__row schedule__row--past" data-race="melbourne">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/au.png" alt="Australia" />
+              <div class="schedule__date"><span class="schedule__month">MAR</span><span class="schedule__days">06–08</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 1 · MELBOURNE</div><div class="schedule__country">AUSTRALIA</div></div>
+            </div>
+            <div class="schedule__row schedule__row--next schedule__row--sprint" data-race="shanghai">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/cn.png" alt="China" />
+              <div class="schedule__date"><span class="schedule__month">MAR</span><span class="schedule__days">13–15</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 2 · SHANGHAI</div><div class="schedule__country">CHINA</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row" data-race="suzuka">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/jp.png" alt="Japan" />
+              <div class="schedule__date"><span class="schedule__month">MAR</span><span class="schedule__days">27–29</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 3 · SUZUKA</div><div class="schedule__country">JAPAN</div></div>
+            </div>
+            <div class="schedule__row" data-race="sakhir">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/bh.png" alt="Bahrain" />
+              <div class="schedule__date"><span class="schedule__month">APR</span><span class="schedule__days">10–12</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 4 · SAKHIR</div><div class="schedule__country">BAHRAIN</div></div>
+            </div>
+            <div class="schedule__row" data-race="jeddah">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/sa.png" alt="Saudi Arabia" />
+              <div class="schedule__date"><span class="schedule__month">APR</span><span class="schedule__days">17–19</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 5 · JEDDAH</div><div class="schedule__country">SAUDI ARABIA</div></div>
+            </div>
+            <div class="schedule__row schedule__row--sprint" data-race="miami">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/us.png" alt="United States" />
+              <div class="schedule__date"><span class="schedule__month">MAY</span><span class="schedule__days">01–03</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 6 · MIAMI</div><div class="schedule__country">MIAMI</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row schedule__row--sprint" data-race="montreal">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/ca.png" alt="Canada" />
+              <div class="schedule__date"><span class="schedule__month">MAY</span><span class="schedule__days">22–24</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 7 · MONTREAL</div><div class="schedule__country">CANADA</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row" data-race="monaco">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/mc.png" alt="Monaco" />
+              <div class="schedule__date"><span class="schedule__month">JUN</span><span class="schedule__days">05–07</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 8 · MONACO</div><div class="schedule__country">MONACO</div></div>
+            </div>
+            <div class="schedule__row" data-race="barcelona">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/es.png" alt="Spain" />
+              <div class="schedule__date"><span class="schedule__month">JUN</span><span class="schedule__days">12–14</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 9 · BARCELONA</div><div class="schedule__country">SPAIN</div></div>
+            </div>
+            <div class="schedule__row" data-race="spielberg">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/at.png" alt="Austria" />
+              <div class="schedule__date"><span class="schedule__month">JUN</span><span class="schedule__days">26–28</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 10 · SPIELBERG</div><div class="schedule__country">AUSTRIA</div></div>
+            </div>
+            <div class="schedule__row schedule__row--sprint" data-race="silverstone">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/gb.png" alt="Great Britain" />
+              <div class="schedule__date"><span class="schedule__month">JUL</span><span class="schedule__days">03–05</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 11 · SILVERSTONE</div><div class="schedule__country">GREAT BRITAIN</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row" data-race="spa">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/be.png" alt="Belgium" />
+              <div class="schedule__date"><span class="schedule__month">JUL</span><span class="schedule__days">17–19</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 12 · SPA-FRANCORCHAMPS</div><div class="schedule__country">BELGIUM</div></div>
+            </div>
+          </div>
+
+          <!-- Right column: rounds 13–24 -->
+          <div class="schedule__col">
+            <div class="schedule__row" data-race="budapest">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/hu.png" alt="Hungary" />
+              <div class="schedule__date"><span class="schedule__month">JUL</span><span class="schedule__days">24–26</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 13 · BUDAPEST</div><div class="schedule__country">HUNGARY</div></div>
+            </div>
+            <div class="schedule__row schedule__row--sprint" data-race="zandvoort">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/nl.png" alt="Netherlands" />
+              <div class="schedule__date"><span class="schedule__month">AUG</span><span class="schedule__days">21–23</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 14 · ZANDVOORT</div><div class="schedule__country">NETHERLANDS</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row" data-race="monza">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/it.png" alt="Italy" />
+              <div class="schedule__date"><span class="schedule__month">SEP</span><span class="schedule__days">04–06</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 15 · MONZA</div><div class="schedule__country">ITALY</div></div>
+            </div>
+            <div class="schedule__row" data-race="madrid">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/es.png" alt="Spain" />
+              <div class="schedule__date"><span class="schedule__month">SEP</span><span class="schedule__days">11–13</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 16 · MADRID</div><div class="schedule__country">SPAIN</div></div>
+            </div>
+            <div class="schedule__row" data-race="baku">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/az.png" alt="Azerbaijan" />
+              <div class="schedule__date"><span class="schedule__month">SEP</span><span class="schedule__days">25–27</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 17 · BAKU</div><div class="schedule__country">AZERBAIJAN</div></div>
+            </div>
+            <div class="schedule__row schedule__row--sprint" data-race="singapore">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/sg.png" alt="Singapore" />
+              <div class="schedule__date"><span class="schedule__month">OCT</span><span class="schedule__days">09–11</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 18 · SINGAPORE</div><div class="schedule__country">SINGAPORE</div></div>
+              <span class="schedule__sprint-badge">SPRINT</span>
+            </div>
+            <div class="schedule__row" data-race="austin">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/us.png" alt="United States" />
+              <div class="schedule__date"><span class="schedule__month">OCT</span><span class="schedule__days">23–25</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 19 · AUSTIN</div><div class="schedule__country">UNITED STATES</div></div>
+            </div>
+            <div class="schedule__row" data-race="mexico">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/mx.png" alt="Mexico" />
+              <div class="schedule__date"><span class="schedule__month">OCT/NOV</span><span class="schedule__days">30–01</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 20 · MEXICO CITY</div><div class="schedule__country">MEXICO</div></div>
+            </div>
+            <div class="schedule__row" data-race="saopaulo">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/br.png" alt="Brazil" />
+              <div class="schedule__date"><span class="schedule__month">NOV</span><span class="schedule__days">06–08</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 21 · SÃO PAULO</div><div class="schedule__country">BRAZIL</div></div>
+            </div>
+            <div class="schedule__row" data-race="lasvegas">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/us.png" alt="United States" />
+              <div class="schedule__date"><span class="schedule__month">NOV</span><span class="schedule__days">19–21</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 22 · LAS VEGAS</div><div class="schedule__country">LAS VEGAS</div></div>
+            </div>
+            <div class="schedule__row" data-race="lusail">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/qa.png" alt="Qatar" />
+              <div class="schedule__date"><span class="schedule__month">NOV</span><span class="schedule__days">27–29</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 23 · LUSAIL</div><div class="schedule__country">QATAR</div></div>
+            </div>
+            <div class="schedule__row schedule__row--last" data-race="yasisland">
+              <img class="schedule__flag" src="https://flagcdn.com/w40/ae.png" alt="Abu Dhabi" />
+              <div class="schedule__date"><span class="schedule__month">DEC</span><span class="schedule__days">04–06</span></div>
+              <div class="schedule__info"><div class="schedule__round-venue">ROUND 24 · YAS ISLAND</div><div class="schedule__country">ABU DHABI</div></div>
+            </div>
+          </div>
+
+        </div>
+        <div class="schedule__legend">
+          <span class="schedule__legend-item"><span class="schedule__sprint-badge schedule__sprint-badge--sm">SPRINT</span> — уик-энд со спринтом</span>
+          <span class="schedule__legend-sep">·</span>
+          <span class="schedule__legend-item schedule__legend-item--note">* Мадрид — при условии гомологации трассы FIA</span>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="site-footer">
+      <span class="site-footer__copy">© 2026 Kanin Roman</span>
+      <span class="site-footer__contact">
+        Нашли ошибку?&nbsp;
+        <a class="site-footer__link" href="mailto:kaninroman@proton.me">kaninroman@proton.me</a>
+      </span>
+      <a class="site-footer__github" href="https://github.com/zolbirg" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+        </svg>
+      </a>
+    </footer>
+  </div>
+
+  <!-- ── RACE INFO TOOLTIP (hover) ───────────────────────────────── -->
+  <div class="race-tooltip hidden" id="raceTooltip">
+    <div class="race-popup__header">
+      <div class="race-popup__title-group">
+        <img class="race-popup__flag" id="raceTooltipFlag" src="" alt="" />
+        <div>
+          <div class="race-popup__round" id="raceTooltipRound"></div>
+          <div class="race-popup__name" id="raceTooltipName"></div>
+        </div>
+      </div>
+    </div>
+    <div class="race-popup__meta" id="raceTooltipMeta"></div>
+    <ul class="race-popup__facts" id="raceTooltipFacts"></ul>
+    <div class="race-tooltip__hint">Нажмите для подробностей →</div>
+  </div>
+
+  <!-- ── RACE DETAIL PAGE ──────────────────────────────────────── -->
+  <div class="race-page hidden" id="racePage">
+    <header class="race-page__header">
+      <button class="nav-btn nav-btn--back" onclick="window.closeRacePage()" title="Назад">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="race-page__logo">
+        <span class="race-page__logo-f1">F1</span>
+        <span class="race-page__logo-year">2026</span>
+      </div>
+      <div style="width:40px"></div>
+    </header>
+
+    <div class="race-page__body">
+
+      <!-- Race title band -->
+      <div class="race-page__title-band">
+        <img class="race-page__flag" id="racePageFlag" src="" alt="" />
+        <div class="race-page__title-text">
+          <div class="race-page__round-label" id="racePageRound"></div>
+          <h1 class="race-page__name" id="racePageName"></h1>
+          <div class="race-page__circuit-name" id="racePageCircuit"></div>
+        </div>
+        <div class="race-page__dates-badge" id="racePageDates"></div>
+      </div>
+
+      <!-- Circuit map -->
+      <div class="race-page__map-wrap" id="racePageMapWrap">
+        <img class="race-page__map" id="racePageMap" src="" alt="" />
+        <div class="race-page__map-overlay">
+          <div class="race-page__map-badge" id="racePageMapBadge"></div>
+        </div>
+      </div>
+
+      <!-- Stats infographic -->
+      <div class="race-page__stats-grid">
+        <div class="race-page__stat-card">
+          <svg class="race-page__stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="race-page__stat-value" id="racePageLaps"></span>
+          <span class="race-page__stat-label">КРУГОВ</span>
+        </div>
+        <div class="race-page__stat-card">
+          <svg class="race-page__stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6l9-3 9 3M3 18l9 3 9-3"/></svg>
+          <span class="race-page__stat-value" id="racePageLength"></span>
+          <span class="race-page__stat-label">ДЛИНА КРУГА</span>
+        </div>
+        <div class="race-page__stat-card">
+          <svg class="race-page__stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span class="race-page__stat-value" id="racePageDistance"></span>
+          <span class="race-page__stat-label">ДИСТАНЦИЯ</span>
+        </div>
+        <div class="race-page__stat-card">
+          <svg class="race-page__stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="race-page__stat-value" id="racePageFirstGP"></span>
+          <span class="race-page__stat-label">ПЕРВЫЙ ГП</span>
+        </div>
+        <div class="race-page__stat-card race-page__stat-card--wide">
+          <svg class="race-page__stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span class="race-page__stat-value race-page__stat-value--sm" id="racePageLapRecord"></span>
+          <span class="race-page__stat-label">РЕКОРД КРУГА</span>
+        </div>
+      </div>
+
+      <!-- Facts -->
+      <main class="race-page__main">
+        <button class="race-page__main-toggle" id="raceFactsToggle" aria-expanded="false">
+          <span class="race-page__section-title">О ТРАССЕ</span>
+          <svg class="race-page__main-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <ul class="race-page__facts" id="racePageFacts"></ul>
+      </main>
+
+      <!-- Race Results -->
+      <section class="race-results hidden" id="racePageResults">
+        <div class="race-results__header">
+          <h2 class="race-page__section-title">РЕЗУЛЬТАТЫ</h2>
+          <div class="race-results__tabs" id="raceResultsTabs"></div>
+        </div>
+        <div class="race-results__body">
+          <div class="race-results__loading hidden" id="raceResultsLoading">
+            <span class="race-results__spinner"></span>
+          </div>
+          <table class="race-results__table" id="raceResultsTable"></table>
+          <button class="race-results__show-all hidden" id="raceResultsShowAll">
+            Показать всё <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ── RACE BINGO (3×3) ─────────────────────────────────────────── -->
+  <div class="app hidden" id="appPage">
+
+    <header class="header">
+      <div class="header__left">
+        <button class="nav-btn nav-btn--back" onclick="showModePage()" title="К выбору режима">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="header__logo">
+          <span class="header__logo-icon">🏎</span>
+          <span class="header__logo-text">БИНГО ГОНКИ</span>
+        </div>
+      </div>
+      <nav class="header__nav">
+        <button class="nav-btn hidden admin-btn" id="adminBtn" onclick="toggleAdmin()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Админ
+        </button>
+        <button class="nav-btn" id="statsBtn" onclick="toggleStats()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Статистика
+        </button>
+        <div class="header__player-name" id="racePlayerName">—</div>
+        <button class="nav-btn nav-btn--icon" onclick="handleLogout()" title="Выйти">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <!-- Stats panel -->
+    <div class="overlay hidden" id="statsOverlay">
+      <div class="modal modal--wide">
+        <h2 class="modal__title">Статистика</h2>
+        <div id="statsContent" class="stats-content"></div>
+        <button class="btn btn--ghost btn--full" onclick="toggleStats()">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- Bingo win overlay -->
+    <div class="overlay hidden" id="bingoOverlay">
+      <div class="modal modal--bingo">
+        <div class="bingo-win__flag">🏁</div>
+        <h1 class="bingo-win__title">BINGO!</h1>
+        <p class="bingo-win__subtitle" id="bingoSubtitle"></p>
+        <button class="btn btn--primary btn--full" onclick="resetGame()">Сыграть ещё раз</button>
+      </div>
+    </div>
+
+    <!-- Game board -->
+    <main class="main">
+      <div class="player-label">ИГРОК</div>
+      <div class="player-name" id="playerNameDisplay">—</div>
+
+      <div class="bingo-grid" id="bingoGrid"></div>
+
+      <div class="score-bar">
+        <div class="score-block">
+          <div class="score-block__label">РЕКОРД</div>
+          <div class="score-block__value">
+            <span class="score-block__dot score-block__dot--record"></span>
+            <span id="recordScore">0</span>
+            <span class="score-block__total">/9</span>
+          </div>
+        </div>
+        <div class="score-block score-block--right">
+          <div class="score-block__label">ЭТА СЕССИЯ</div>
+          <div class="score-block__value">
+            <span class="score-block__dot score-block__dot--session"></span>
+            <span id="sessionScore">0</span>
+            <span class="score-block__total">/9</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn--primary btn--reset" onclick="resetGame()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+        НАЧАТЬ ЗАНОВО
+      </button>
+    </main>
+
+    <footer class="site-footer">
+      <span class="site-footer__copy">© 2026 Kanin Roman</span>
+      <span class="site-footer__contact">
+        Нашли ошибку?&nbsp;
+        <a class="site-footer__link" href="mailto:kaninroman@proton.me">kaninroman@proton.me</a>
+      </span>
+      <a class="site-footer__github" href="https://github.com/zolbirg" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+        </svg>
+      </a>
+    </footer>
+
+  </div>
+
+  <!-- ── SEASON BINGO (5×10) ──────────────────────────────────────── -->
+  <div class="app hidden" id="seasonPage">
+
+    <header class="header">
+      <div class="header__left">
+        <button class="nav-btn nav-btn--back" onclick="showModePage()" title="К выбору режима">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="header__logo">
+          <span class="header__logo-icon">🏆</span>
+          <span class="header__logo-text">БИНГО СЕЗОНА</span>
+        </div>
+      </div>
+      <nav class="header__nav">
+        <button class="nav-btn hidden admin-btn" id="adminBtnSeason" onclick="toggleAdmin()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Админ
+        </button>
+        <button class="nav-btn" onclick="toggleSeasonStats()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Статистика
+        </button>
+        <div class="header__player-name" id="seasonPlayerNameHeader">—</div>
+        <button class="nav-btn nav-btn--icon" onclick="handleLogout()" title="Выйти">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <!-- Season stats panel -->
+    <div class="overlay hidden" id="seasonStatsOverlay">
+      <div class="modal modal--wide">
+        <h2 class="modal__title">Статистика сезона</h2>
+        <div id="seasonStatsContent" class="stats-content"></div>
+        <button class="btn btn--ghost btn--full" onclick="toggleSeasonStats()">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- Season bingo win overlay -->
+    <div class="overlay hidden" id="seasonBingoOverlay">
+      <div class="modal modal--bingo">
+        <div class="bingo-win__flag">🏆</div>
+        <h1 class="bingo-win__title">BINGO!</h1>
+        <p class="bingo-win__subtitle" id="seasonBingoSubtitle"></p>
+        <button class="btn btn--primary btn--full" onclick="closeSeasonBingo()">Продолжить</button>
+      </div>
+    </div>
+
+    <!-- Season game board -->
+    <main class="main main--season">
+      <div class="player-label">ИГРОК</div>
+      <div class="player-name" id="seasonPlayerName">—</div>
+
+      <div class="season-grid" id="seasonGrid"></div>
+
+      <div class="score-bar">
+        <div class="score-block">
+          <div class="score-block__label">РЕКОРД</div>
+          <div class="score-block__value">
+            <span class="score-block__dot score-block__dot--record"></span>
+            <span id="seasonRecordScore">0</span>
+            <span class="score-block__total">/50</span>
+          </div>
+        </div>
+        <div class="score-block score-block--right">
+          <div class="score-block__label">ЭТА СЕССИЯ</div>
+          <div class="score-block__value">
+            <span class="score-block__dot score-block__dot--session"></span>
+            <span id="seasonSessionScore">0</span>
+            <span class="score-block__total">/50</span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <footer class="site-footer">
+      <span class="site-footer__copy">© 2026 Kanin Roman</span>
+      <span class="site-footer__contact">
+        Нашли ошибку?&nbsp;
+        <a class="site-footer__link" href="mailto:kaninroman@proton.me">kaninroman@proton.me</a>
+      </span>
+      <a class="site-footer__github" href="https://github.com/zolbirg" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+        </svg>
+      </a>
+    </footer>
+
+  </div>
+
+  <!-- Admin panel (global, available on all pages) -->
+  <div class="overlay hidden" id="adminOverlay">
+    <div class="modal modal--wide modal--admin">
+      <h2 class="modal__title">Панель администратора</h2>
+      <p class="modal__subtitle">Управление событиями бинго</p>
+      <div id="adminEventsList" class="admin-events"></div>
+      <div class="admin-add">
+        <input class="modal__input" id="newEventInput" type="text" placeholder="Новое событие..." maxlength="80" />
+        <button class="btn btn--primary" onclick="addEvent()">Добавить</button>
+      </div>
+      <button class="btn btn--ghost btn--full" onclick="toggleAdmin()">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
