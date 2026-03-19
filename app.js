@@ -101,6 +101,7 @@ function normalizeEvents(events) {
 
 // ── Current mode ──────────────────────────────────────────────────────────
 let currentMode = 'race';
+let pendingModeAfterAuth = null;
 
 // ── Race game state ───────────────────────────────────────────────────────
 const state = {
@@ -113,6 +114,7 @@ const state = {
   recordScore:  0,
   totalGames:   0,
   totalBingos:  0,
+  totalSuperBingos: 0,
   bingoLines:   [],
 };
 
@@ -146,6 +148,7 @@ function loadStorage() {
     if (d.recordScore)          state.recordScore  = d.recordScore;
     if (d.totalGames)           state.totalGames   = d.totalGames;
     if (d.totalBingos)          state.totalBingos  = d.totalBingos;
+    if (d.totalSuperBingos)     state.totalSuperBingos = d.totalSuperBingos;
     if (d.boardEvents?.length)  state.boardEvents  = d.boardEvents;
     if (d.checked?.length)      state.checked      = d.checked.map(v => typeof v === 'boolean' ? (v ? 1 : 0) : (v ?? 0));
     if (d.sessionScore)         state.sessionScore = d.sessionScore;
@@ -158,6 +161,7 @@ function saveStorage() {
     recordScore:  state.recordScore,
     totalGames:   state.totalGames,
     totalBingos:  state.totalBingos,
+    totalSuperBingos: state.totalSuperBingos,
     boardEvents:  state.boardEvents,
     checked:      state.checked,
     sessionScore: state.sessionScore,
@@ -267,10 +271,21 @@ onAuthStateChanged(auth, user => {
     state.playerName = user.displayName || user.email?.split('@')[0] || 'Пилот';
     loadStorage();
     loadSeasonStorage();
+    closeAuthModal();
     showModePage();
+    if (pendingModeAfterAuth) {
+      const modeToOpen = pendingModeAfterAuth;
+      pendingModeAfterAuth = null;
+      if (modeToOpen === 'race') {
+        showApp();
+      } else {
+        showSeasonGame();
+      }
+    }
   } else {
     state.uid = null;
-    showLogin();
+    state.playerName = 'Гость';
+    showModePage();
   }
 });
 
@@ -282,19 +297,51 @@ function hideAllPages() {
   document.getElementById('seasonPage').classList.add('hidden');
 }
 
-function showLogin() {
-  hideAllPages();
+window.openAuthModal = function(tab = 'login') {
+  switchTab(tab);
+  setAuthError('');
   document.getElementById('loginPage').classList.remove('hidden');
+};
+
+window.closeAuthModal = function() {
+  document.getElementById('loginPage').classList.add('hidden');
+  setAuthError('');
+};
+
+function closeAuthModal() {
+  window.closeAuthModal();
+}
+
+function updateModeHeaderAuthUI() {
+  const isAuthed = Boolean(auth.currentUser);
+  const modePlayerName = document.getElementById('modePlayerName');
+  const modeLogoutBtn = document.getElementById('modeLogoutBtn');
+  const modeAuthBtn = document.getElementById('modeAuthBtn');
+
+  modePlayerName.classList.toggle('hidden', !isAuthed);
+  modeLogoutBtn.classList.toggle('hidden', !isAuthed);
+  modeAuthBtn.classList.toggle('hidden', isAuthed);
+}
+
+function showLogin() {
+  openAuthModal('login');
 }
 
 window.showModePage = function() {
   hideAllPages();
   document.getElementById('modePage').classList.remove('hidden');
   document.getElementById('modePlayerName').textContent = state.playerName;
+  updateModeHeaderAuthUI();
   updateAdminButtons();
 };
 
 window.selectMode = function(mode) {
+  if (!auth.currentUser) {
+    pendingModeAfterAuth = mode;
+    openAuthModal('login');
+    return;
+  }
+
   currentMode = mode;
   if (mode === 'race') {
     showApp();
@@ -440,8 +487,155 @@ window.handleLogout = async function() {
 };
 
 // ── Race game logic ───────────────────────────────────────────────────────
+const raceFireworks = {
+  canvas: null,
+  ctx: null,
+  particles: [],
+  animationFrame: 0,
+  burstTimer: 0,
+  stopTimer: 0,
+  running: false,
+};
+let raceSuperBingoTimer = 0;
+
+function getRaceFireworksCanvas() {
+  if (raceFireworks.canvas) return raceFireworks.canvas;
+  raceFireworks.canvas = document.getElementById('raceFireworksCanvas');
+  if (raceFireworks.canvas) raceFireworks.ctx = raceFireworks.canvas.getContext('2d');
+  return raceFireworks.canvas;
+}
+
+function resizeRaceFireworksCanvas() {
+  const canvas = getRaceFireworksCanvas();
+  const ctx = raceFireworks.ctx;
+  if (!canvas || !ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.floor(window.innerWidth);
+  const height = Math.floor(window.innerHeight);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function spawnRaceFireworksBurst() {
+  const canvas = getRaceFireworksCanvas();
+  if (!canvas) return;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const originX = width * (0.12 + Math.random() * 0.76);
+  const originY = height * (0.16 + Math.random() * 0.44);
+  const count = 28 + Math.floor(Math.random() * 14);
+  const baseHue = Math.floor(Math.random() * 360);
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.18;
+    const speed = 2.3 + Math.random() * 3.4;
+    raceFireworks.particles.push({
+      x: originX,
+      y: originY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 36 + Math.random() * 30,
+      ttl: 36 + Math.random() * 30,
+      hue: (baseHue + Math.floor(Math.random() * 55)) % 360,
+      size: 1.8 + Math.random() * 2.5,
+    });
+  }
+}
+
+function stepRaceFireworks() {
+  const canvas = raceFireworks.canvas;
+  const ctx = raceFireworks.ctx;
+  if (!canvas || !ctx || !raceFireworks.running) return;
+
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+  for (let i = raceFireworks.particles.length - 1; i >= 0; i--) {
+    const p = raceFireworks.particles[i];
+    p.life -= 1;
+    if (p.life <= 0) {
+      raceFireworks.particles.splice(i, 1);
+      continue;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.988;
+    p.vy = p.vy * 0.988 + 0.045;
+
+    const alpha = p.life / p.ttl;
+    ctx.beginPath();
+    ctx.fillStyle = `hsla(${p.hue}, 100%, 62%, ${Math.max(alpha, 0)})`;
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  raceFireworks.animationFrame = requestAnimationFrame(stepRaceFireworks);
+}
+
+function stopRaceFireworks() {
+  raceFireworks.running = false;
+  if (raceFireworks.burstTimer) clearInterval(raceFireworks.burstTimer);
+  if (raceFireworks.stopTimer) clearTimeout(raceFireworks.stopTimer);
+  if (raceFireworks.animationFrame) cancelAnimationFrame(raceFireworks.animationFrame);
+  raceFireworks.burstTimer = 0;
+  raceFireworks.stopTimer = 0;
+  raceFireworks.animationFrame = 0;
+  raceFireworks.particles = [];
+
+  const canvas = getRaceFireworksCanvas();
+  if (!canvas || !raceFireworks.ctx) return;
+  canvas.classList.add('hidden');
+  raceFireworks.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function showRaceFireworks() {
+  const canvas = getRaceFireworksCanvas();
+  if (!canvas || !raceFireworks.ctx) return;
+
+  stopRaceFireworks();
+  resizeRaceFireworksCanvas();
+
+  canvas.classList.remove('hidden');
+  raceFireworks.running = true;
+  spawnRaceFireworksBurst();
+  raceFireworks.burstTimer = setInterval(spawnRaceFireworksBurst, 230);
+  raceFireworks.animationFrame = requestAnimationFrame(stepRaceFireworks);
+  raceFireworks.stopTimer = setTimeout(stopRaceFireworks, 3200);
+}
+
+function showRaceSuperBingoFx() {
+  const fx = document.getElementById('raceSuperBingoFx');
+  if (!fx) return;
+
+  if (raceSuperBingoTimer) clearTimeout(raceSuperBingoTimer);
+  fx.classList.add('hidden');
+  void fx.offsetWidth;
+  fx.classList.remove('hidden');
+
+  raceSuperBingoTimer = setTimeout(() => {
+    fx.classList.add('hidden');
+    raceSuperBingoTimer = 0;
+  }, 1400);
+}
+
+function scheduleRaceSuperBingoCountUpdate() {
+  setTimeout(() => {
+    state.totalSuperBingos++;
+    saveStorage();
+
+    const statsOverlay = document.getElementById('statsOverlay');
+    if (statsOverlay && !statsOverlay.classList.contains('hidden')) renderStats();
+  }, 1400);
+}
+
 window.toggleCell = function(idx) {
-  if (state.bingoLines.length) return;
+  const prevCompleted = buildCompleted(state.boardEvents, state.checked);
+  const wasAllCompleted = prevCompleted.length > 0 && prevCompleted.every(Boolean);
 
   const required = getCellRequired(state.boardEvents[idx]);
   const current  = state.checked[idx] || 0;
@@ -450,19 +644,27 @@ window.toggleCell = function(idx) {
 
   const completed    = buildCompleted(state.boardEvents, state.checked);
   const count        = completed.filter(Boolean).length;
+  const isAllCompleted = completed.length > 0 && completed.every(Boolean);
   state.sessionScore = count;
   if (count > state.recordScore) state.recordScore = count;
 
+  const prevBingoCount = state.bingoLines.length;
   state.bingoLines = calcBingoLines(completed);
 
   renderBoard();
   renderScore();
   saveStorage();
 
-  if (state.bingoLines.length) {
+  if (state.bingoLines.length > prevBingoCount) {
     state.totalBingos++;
     saveStorage();
     setTimeout(showBingo, 600);
+  }
+
+  if (!wasAllCompleted && isAllCompleted) {
+    showRaceFireworks();
+    showRaceSuperBingoFx();
+    scheduleRaceSuperBingoCountUpdate();
   }
 };
 
@@ -474,9 +676,15 @@ window.resetGame = function() {
   state.bingoLines   = [];
 
   document.getElementById('bingoOverlay').classList.add('hidden');
+  document.getElementById('raceSuperBingoFx')?.classList.add('hidden');
+  stopRaceFireworks();
   renderBoard();
   renderScore();
   saveStorage();
+};
+
+window.closeBingo = function() {
+  document.getElementById('bingoOverlay').classList.add('hidden');
 };
 
 function showBingo() {
@@ -534,7 +742,151 @@ function renderPlayerName() {
 }
 
 // ── Season game logic ─────────────────────────────────────────────────────
+const seasonFireworks = {
+  canvas: null,
+  ctx: null,
+  particles: [],
+  animationFrame: 0,
+  burstTimer: 0,
+  stopTimer: 0,
+  running: false,
+};
+let seasonSuperBingoTimer = 0;
+
+function getSeasonFireworksCanvas() {
+  if (seasonFireworks.canvas) return seasonFireworks.canvas;
+  seasonFireworks.canvas = document.getElementById('seasonFireworksCanvas');
+  if (seasonFireworks.canvas) seasonFireworks.ctx = seasonFireworks.canvas.getContext('2d');
+  return seasonFireworks.canvas;
+}
+
+function resizeSeasonFireworksCanvas() {
+  const canvas = getSeasonFireworksCanvas();
+  const ctx = seasonFireworks.ctx;
+  if (!canvas || !ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.floor(window.innerWidth);
+  const height = Math.floor(window.innerHeight);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function spawnSeasonFireworksBurst() {
+  const canvas = getSeasonFireworksCanvas();
+  if (!canvas) return;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const originX = width * (0.12 + Math.random() * 0.76);
+  const originY = height * (0.16 + Math.random() * 0.44);
+  const count = 28 + Math.floor(Math.random() * 14);
+  const baseHue = Math.floor(Math.random() * 360);
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.18;
+    const speed = 2.3 + Math.random() * 3.4;
+    seasonFireworks.particles.push({
+      x: originX,
+      y: originY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 36 + Math.random() * 30,
+      ttl: 36 + Math.random() * 30,
+      hue: (baseHue + Math.floor(Math.random() * 55)) % 360,
+      size: 1.8 + Math.random() * 2.5,
+    });
+  }
+}
+
+function stepSeasonFireworks() {
+  const canvas = seasonFireworks.canvas;
+  const ctx = seasonFireworks.ctx;
+  if (!canvas || !ctx || !seasonFireworks.running) return;
+
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+  for (let i = seasonFireworks.particles.length - 1; i >= 0; i--) {
+    const p = seasonFireworks.particles[i];
+    p.life -= 1;
+    if (p.life <= 0) {
+      seasonFireworks.particles.splice(i, 1);
+      continue;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.988;
+    p.vy = p.vy * 0.988 + 0.045;
+
+    const alpha = p.life / p.ttl;
+    ctx.beginPath();
+    ctx.fillStyle = `hsla(${p.hue}, 100%, 62%, ${Math.max(alpha, 0)})`;
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  seasonFireworks.animationFrame = requestAnimationFrame(stepSeasonFireworks);
+}
+
+function stopSeasonFireworks() {
+  seasonFireworks.running = false;
+  if (seasonFireworks.burstTimer) clearInterval(seasonFireworks.burstTimer);
+  if (seasonFireworks.stopTimer) clearTimeout(seasonFireworks.stopTimer);
+  if (seasonFireworks.animationFrame) cancelAnimationFrame(seasonFireworks.animationFrame);
+  seasonFireworks.burstTimer = 0;
+  seasonFireworks.stopTimer = 0;
+  seasonFireworks.animationFrame = 0;
+  seasonFireworks.particles = [];
+
+  const canvas = getSeasonFireworksCanvas();
+  if (!canvas || !seasonFireworks.ctx) return;
+  canvas.classList.add('hidden');
+  seasonFireworks.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function showSeasonFireworks() {
+  const canvas = getSeasonFireworksCanvas();
+  if (!canvas || !seasonFireworks.ctx) return;
+
+  stopSeasonFireworks();
+  resizeSeasonFireworksCanvas();
+
+  canvas.classList.remove('hidden');
+  seasonFireworks.running = true;
+  spawnSeasonFireworksBurst();
+  seasonFireworks.burstTimer = setInterval(spawnSeasonFireworksBurst, 230);
+  seasonFireworks.animationFrame = requestAnimationFrame(stepSeasonFireworks);
+  seasonFireworks.stopTimer = setTimeout(stopSeasonFireworks, 3200);
+}
+
+function showSeasonSuperBingoFx() {
+  const fx = document.getElementById('seasonSuperBingoFx');
+  if (!fx) return;
+
+  if (seasonSuperBingoTimer) clearTimeout(seasonSuperBingoTimer);
+  fx.classList.add('hidden');
+  void fx.offsetWidth;
+  fx.classList.remove('hidden');
+
+  seasonSuperBingoTimer = setTimeout(() => {
+    fx.classList.add('hidden');
+    seasonSuperBingoTimer = 0;
+  }, 1400);
+}
+
+window.addEventListener('resize', () => {
+  resizeRaceFireworksCanvas();
+  resizeSeasonFireworksCanvas();
+});
+
 window.toggleSeasonCell = function(idx) {
+  const prevCompleted = buildCompleted(seasonState.boardEvents, seasonState.checked);
+  const wasAllCompleted = prevCompleted.length > 0 && prevCompleted.every(Boolean);
+
   const required = getCellRequired(seasonState.boardEvents[idx]);
   const current  = seasonState.checked[idx] || 0;
 
@@ -542,6 +894,7 @@ window.toggleSeasonCell = function(idx) {
 
   const completed          = buildCompleted(seasonState.boardEvents, seasonState.checked);
   const count              = completed.filter(Boolean).length;
+  const isAllCompleted     = completed.length > 0 && completed.every(Boolean);
   seasonState.sessionScore = count;
   if (count > seasonState.recordScore) seasonState.recordScore = count;
 
@@ -556,6 +909,11 @@ window.toggleSeasonCell = function(idx) {
     seasonState.totalBingos++;
     saveSeasonStorage();
     setTimeout(showSeasonBingo, 600);
+  }
+
+  if (!wasAllCompleted && isAllCompleted) {
+    showSeasonFireworks();
+    showSeasonSuperBingoFx();
   }
 };
 
@@ -693,12 +1051,14 @@ window.toggleStats = function() {
 };
 
 function renderStats() {
+  const eventsInBase = getEventsPool().length;
   const rows = [
     { label: 'Игрок',             value: state.playerName },
     { label: 'Игр сыграно',       value: state.totalGames },
     { label: 'Бинго получено',    value: state.totalBingos,  accent: true },
+    { label: 'Супер бинго',       value: state.totalSuperBingos, accent: true },
     { label: 'Рекорд отмеченных', value: `${state.recordScore}/9`, accent: state.recordScore === 9 },
-    { label: 'Событий в базе',    value: state.events.length || DEFAULT_EVENTS.length },
+    { label: 'Событий в базе',    value: eventsInBase },
     { label: 'Текущая сессия',    value: `${state.sessionScore}/9` },
   ];
   document.getElementById('statsContent').innerHTML = rows.map(r => `
@@ -719,7 +1079,6 @@ window.toggleSeasonStats = function() {
 function renderSeasonStats() {
   const rows = [
     { label: 'Игрок',             value: state.playerName },
-    { label: 'Игр сыграно',       value: seasonState.totalGames },
     { label: 'Бинго получено',    value: seasonState.totalBingos, accent: true },
     { label: 'Рекорд отмеченных', value: `${seasonState.recordScore}/50`, accent: seasonState.recordScore === 50 },
     { label: 'Текущая сессия',    value: `${seasonState.sessionScore}/50` },
@@ -737,6 +1096,10 @@ function renderSeasonStats() {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) document.getElementById(id).classList.add('hidden');
   });
+});
+
+document.getElementById('loginPage').addEventListener('click', e => {
+  if (e.target.id === 'loginPage') closeAuthModal();
 });
 
 // ── Race info data ─────────────────────────────────────────────────────────
@@ -808,7 +1171,7 @@ const RACE_INFO = {
   },
   miami: {
     name: 'Гран-При Майами',
-    circuit: 'Майами Интернэшнл Отодром · Hard Rock Stadium',
+    circuit: 'Майами Интернэшнл Автодром · Hard Rock Stadium',
     laps: 57, length: '5.412 км',
     flag: 'us', round: 6, dates: 'MAY 01–03', sprint: true,
     map: 'https://commons.wikimedia.org/wiki/Special:FilePath/Miami_International_Autodrome.svg',
@@ -984,7 +1347,7 @@ const RACE_INFO = {
     facts: [
       'Специально спроектирована как смесь лучших поворотов F1',
       'Первый поворот — слепой подъём в гору, самый быстрый старт в F1',
-      'Этап со спринтом в 2026 году — два гоночных заезда',
+      'В 2023 году прошёл первый спринт на COTA — трасса для этого идеальна',
       'Гонка часто проходит в переменную погоду с жарой и ливнями',
     ],
   },
@@ -995,7 +1358,7 @@ const RACE_INFO = {
     flag: 'mx', round: 20, dates: 'OCT/NOV 30–01', sprint: false,
     map: 'https://commons.wikimedia.org/wiki/Special:FilePath/Autodromo_Hermanos_Rodriguez.svg',
     facts: [
-      'Высота 2285 м — разряженный воздух снижает мощность двигателей',
+      'Высота 2285 м — разрежённый воздух снижает мощность двигателей',
       'Машины теряют до 20% прижимной силы из-за высоты',
       'Стадионный сектор — огромная трибуна прямо у трассы',
       'Самая шумная и атмосферная публика в F1-мире',
@@ -1009,7 +1372,7 @@ const RACE_INFO = {
     map: 'https://commons.wikimedia.org/wiki/Special:FilePath/Interlagos_circuit_map.svg',
     facts: [
       'Трасса едется против обычного направления — по часовой стрелке',
-      'Этап со спринтом в 2026 — двойная доза действия',
+      'Интерлагос — один из немногих автодромов с историей до Формулы 1',
       'Дождь — практически гарантия: Сан-Паулу непредсказуем по погоде',
       'Самые эмоциональные гонки в истории F1 случались именно здесь',
     ],
@@ -1054,6 +1417,71 @@ const RACE_INFO = {
     ],
   },
 };
+
+const MONTH_TO_INDEX = {
+  JAN: 0,
+  FEB: 1,
+  MAR: 2,
+  APR: 3,
+  MAY: 4,
+  JUN: 5,
+  JUL: 6,
+  AUG: 7,
+  SEP: 8,
+  OCT: 9,
+  NOV: 10,
+  DEC: 11,
+};
+const CANCELLED_RACES = new Set(['sakhir', 'jeddah']);
+
+function parseRaceEndDate(dates, seasonYear = 2026) {
+  if (!dates || typeof dates !== 'string') return null;
+
+  const [monthPart, dayPart] = dates.trim().split(/\s+/);
+  if (!monthPart || !dayPart) return null;
+
+  const months = monthPart.split('/');
+  const startMonth = MONTH_TO_INDEX[months[0]];
+  const endMonthToken = months[months.length - 1];
+  const endMonth = MONTH_TO_INDEX[endMonthToken];
+  if (startMonth == null || endMonth == null) return null;
+
+  const dayRange = dayPart.split('–');
+  const endDay = Number(dayRange[dayRange.length - 1]);
+  if (!Number.isFinite(endDay)) return null;
+
+  const endYear = endMonth < startMonth ? seasonYear + 1 : seasonYear;
+  return new Date(endYear, endMonth, endDay, 23, 59, 59, 999);
+}
+
+function updateScheduleRowStatesByDate() {
+  const rows = Array.from(document.querySelectorAll('.schedule__row[data-race]'));
+  if (!rows.length) return;
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const raceStates = rows.map(row => {
+    const raceKey = row.dataset.race;
+    const race = RACE_INFO[raceKey];
+    const endDate = parseRaceEndDate(race?.dates);
+    const isCancelled = CANCELLED_RACES.has(raceKey);
+    return {
+      row,
+      endDate,
+      isPast: endDate ? endDate < todayStart : false,
+      isCancelled,
+    };
+  });
+
+  raceStates.forEach(({ row, isPast, isCancelled }) => {
+    row.classList.remove('schedule__row--past', 'schedule__row--next', 'schedule__row--cancelled');
+    if (isPast) row.classList.add('schedule__row--past');
+    if (isCancelled) row.classList.add('schedule__row--cancelled');
+  });
+
+  const nextRace = raceStates.find(item => !item.isPast && !item.isCancelled);
+  if (nextRace) nextRace.row.classList.add('schedule__row--next');
+}
 
 // ── Circuit metadata (maps + historical data) ──────────────────────────────
 const F1_MAP_CDN = 'https://media.formula1.com/image/upload/f_auto/q_auto/v0/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/';
@@ -1154,11 +1582,17 @@ const CIRCUIT_META = {
 // ── Race info tooltip (hover) ──────────────────────────────────────────────
 (function initRaceTooltip() {
   const tooltip = document.getElementById('raceTooltip');
+  const tooltipHint = tooltip?.querySelector('.race-tooltip__hint');
   let hideTimer = null;
+  let activeRaceKey = null;
+  const isTouchDevice = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
+  updateScheduleRowStatesByDate();
 
   function showTooltip(key, row) {
     const info = RACE_INFO[key];
     if (!info) return;
+    activeRaceKey = key;
 
     document.getElementById('raceTooltipFlag').src = `https://flagcdn.com/w40/${info.flag}.png`;
     document.getElementById('raceTooltipFlag').alt = info.name;
@@ -1198,28 +1632,67 @@ const CIRCUIT_META = {
 
   function hideTooltip() {
     tooltip.classList.add('hidden');
+    activeRaceKey = null;
+  }
+
+  function openActiveRaceFromTooltip() {
+    if (!activeRaceKey) return;
+    const raceKey = activeRaceKey;
+    hideTooltip();
+    window.openRacePage(raceKey);
   }
 
   document.querySelectorAll('.schedule__row[data-race]').forEach(row => {
     row.style.cursor = 'pointer';
 
-    row.addEventListener('mouseenter', () => {
+    if (!isTouchDevice) {
+      row.addEventListener('mouseenter', () => {
+        clearTimeout(hideTimer);
+        showTooltip(row.dataset.race, row);
+      });
+      row.addEventListener('mouseleave', () => {
+        hideTimer = setTimeout(hideTooltip, 120);
+      });
+      row.addEventListener('click', () => {
+        hideTooltip();
+        window.openRacePage(row.dataset.race);
+      });
+      return;
+    }
+
+    row.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
       clearTimeout(hideTimer);
-      showTooltip(row.dataset.race, row);
-    });
-    row.addEventListener('mouseleave', () => {
-      hideTimer = setTimeout(hideTooltip, 120);
-    });
-    row.addEventListener('click', () => {
-      hideTooltip();
-      window.openRacePage(row.dataset.race);
+      const raceKey = row.dataset.race;
+      activeRaceKey = raceKey;
+      showTooltip(raceKey, row);
     });
   });
 
-  tooltip.addEventListener('mouseenter', () => clearTimeout(hideTimer));
-  tooltip.addEventListener('mouseleave', () => {
-    hideTimer = setTimeout(hideTooltip, 120);
-  });
+  if (!isTouchDevice) {
+    tooltip.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+    tooltip.addEventListener('mouseleave', () => {
+      hideTimer = setTimeout(hideTooltip, 120);
+    });
+  } else {
+    tooltip.style.cursor = 'pointer';
+    tooltip.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openActiveRaceFromTooltip();
+    });
+    document.addEventListener('click', () => hideTooltip());
+  }
+
+  if (tooltipHint) {
+    tooltipHint.style.cursor = 'pointer';
+    tooltipHint.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openActiveRaceFromTooltip();
+    });
+  }
 }());
 
 // ── Race Results ───────────────────────────────────────────────────────────

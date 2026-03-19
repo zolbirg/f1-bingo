@@ -44,6 +44,29 @@ body {
   overflow: hidden;
 }
 
+.auth-overlay.login-page {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  padding: 28px 16px;
+  justify-content: flex-start;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+}
+
+.auth-overlay .login-bg-glow {
+  position: absolute;
+}
+
+.auth-overlay .login-card {
+  margin-top: 12px;
+}
+
+.auth-overlay .login-footer {
+  margin-top: 16px;
+}
+
 /* Red vignette bg glow */
 .login-bg-glow {
   position: fixed;
@@ -379,6 +402,7 @@ body {
   padding: 36px 24px 60px;
   width: 100%;
   max-width: 700px;
+  margin-inline: auto;
   flex: 1;
 }
 
@@ -586,6 +610,35 @@ body {
 
 .btn--full { width: 100%; }
 .btn--reset { width: 100%; max-width: 560px; padding: 15px; }
+
+.rules-panel {
+  width: 100%;
+  max-width: 560px;
+  margin-top: 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,.02);
+}
+
+.rules-panel__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: var(--text-pri);
+}
+
+.rules-panel__list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-sec);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rules-panel__list li + li { margin-top: 6px; }
+.rules-panel--season { max-width: 100%; }
 
 /* btn loading state */
 .btn[disabled] { opacity: .6; cursor: not-allowed; pointer-events: none; }
@@ -924,6 +977,24 @@ body {
   margin-bottom: 20px;
 }
 
+.schedule__spoiler-note {
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: #ffd2db;
+  text-align: center;
+}
+
+.schedule__spoiler-note strong {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 15px;
+  letter-spacing: .12em;
+  color: #ff5f7d;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(255, 95, 125, .35);
+}
+
 /* F1 banner header */
 .schedule__f1-banner {
   display: flex;
@@ -1019,6 +1090,26 @@ body {
 
 .schedule__row--past {
   opacity: .42;
+}
+
+.schedule__row--cancelled {
+  position: relative;
+  opacity: .58;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: rgba(240, 240, 240, .75);
+}
+
+.schedule__row--cancelled::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 2px;
+  background: rgba(240, 240, 240, .75);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .schedule__row--next {
@@ -1210,7 +1301,9 @@ body {
    SEASON BINGO PAGE
 ═══════════════════════════════════════════════════════════════════ */
 .main--season {
+  width: 100%;
   max-width: 960px;
+  margin-inline: auto;
   padding: 28px 24px 60px;
 }
 
@@ -1244,8 +1337,136 @@ body {
 
 .season-grid .cell__checkboxes { gap: 3px; }
 
+.season-fireworks {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 250;
+}
+
+.race-fireworks {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 250;
+}
+
+.season-super-bingo {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 260;
+  text-align: center;
+}
+
+.race-super-bingo {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 260;
+  text-align: center;
+}
+
+.season-super-bingo__title {
+  font-size: clamp(36px, 8.5vw, 96px);
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(232,0,45,.85), 0 0 36px rgba(232,0,45,.65);
+  animation: season-super-bingo-in 1.2s cubic-bezier(.22,.86,.34,1) forwards;
+  text-align: center;
+  max-width: min(92vw, 760px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.race-super-bingo__title {
+  font-size: clamp(36px, 8.5vw, 96px);
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(232,0,45,.85), 0 0 36px rgba(232,0,45,.65);
+  animation: season-super-bingo-in 1.2s cubic-bezier(.22,.86,.34,1) forwards;
+  text-align: center;
+  max-width: min(92vw, 760px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.season-super-bingo__subtitle {
+  font-size: clamp(14px, 2.2vw, 22px);
+  letter-spacing: .12em;
+  color: rgba(255,255,255,.9);
+  text-shadow: 0 0 18px rgba(232,0,45,.45);
+  animation: season-super-bingo-sub 1.25s ease-out forwards;
+}
+
+.race-super-bingo__subtitle {
+  font-size: clamp(14px, 2.2vw, 22px);
+  letter-spacing: .12em;
+  color: rgba(255,255,255,.9);
+  text-shadow: 0 0 18px rgba(232,0,45,.45);
+  animation: season-super-bingo-sub 1.25s ease-out forwards;
+}
+
+@keyframes season-super-bingo-in {
+  0% {
+    transform: translateY(14px) scale(.7);
+    opacity: 0;
+    filter: blur(5px);
+  }
+  35% {
+    transform: translateY(0) scale(1.08);
+    opacity: 1;
+    filter: blur(0);
+  }
+  65% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-6px) scale(.98);
+    opacity: 0;
+  }
+}
+
+@keyframes season-super-bingo-sub {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media (max-width: 700px) {
+  #appPage > .main,
+  #seasonPage > .main.main--season {
+    width: 100%;
+    margin-inline: auto;
+  }
+
   .mode-cards { grid-template-columns: 1fr; max-width: 360px; }
   .mode-card  { padding: 28px 20px 24px; }
   .season-grid { gap: 4px; padding: 8px; }
@@ -1261,10 +1482,111 @@ body {
   .bingo-grid { gap: 6px; padding: 10px; }
   .cell { min-height: 80px; font-size: 11px; padding: 12px 8px; }
   .main { padding: 24px 16px 48px; }
+  .rules-panel { padding: 14px; }
+  .rules-panel__list { font-size: 12px; }
   .header { padding: 14px 16px; }
   .modal { padding: 28px 20px; }
+  .overlay { padding: 14px; }
+  .modal--bingo {
+    max-width: 100%;
+    padding: 24px 16px;
+  }
+  .bingo-win__flag { font-size: clamp(38px, 12vw, 48px); }
+  .bingo-win__title {
+    font-size: clamp(32px, 12vw, 42px);
+    letter-spacing: .06em;
+    line-height: 1.05;
+    text-align: center;
+    max-width: 88vw;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .bingo-win__subtitle {
+    font-size: clamp(12px, 3.8vw, 14px);
+    text-align: center;
+    max-width: 88vw;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .race-super-bingo,
+  .season-super-bingo {
+    padding: 0 14px;
+  }
+  .race-super-bingo__title,
+  .season-super-bingo__title {
+    font-size: clamp(30px, 12vw, 44px);
+    letter-spacing: .04em;
+    line-height: 1.06;
+    max-width: 90vw;
+  }
+  .race-super-bingo__subtitle,
+  .season-super-bingo__subtitle {
+    font-size: clamp(12px, 4vw, 16px);
+    line-height: 1.2;
+    max-width: 90vw;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   .schedule__country { font-size: 13px; }
   .schedule__days { font-size: 15px; }
+}
+
+@media (max-width: 380px) {
+  .modal--bingo {
+    padding: 18px 12px;
+  }
+  .bingo-win__flag {
+    font-size: clamp(30px, 10vw, 40px);
+  }
+  .bingo-win__title {
+    font-size: clamp(24px, 10.5vw, 34px);
+    letter-spacing: .04em;
+    max-width: 86vw;
+  }
+  .bingo-win__subtitle {
+    font-size: clamp(11px, 3.7vw, 13px);
+    max-width: 86vw;
+  }
+  .race-super-bingo,
+  .season-super-bingo {
+    gap: 6px;
+    padding: 0 10px;
+  }
+  .race-super-bingo__title,
+  .season-super-bingo__title {
+    font-size: clamp(24px, 10.5vw, 34px);
+    letter-spacing: .03em;
+    line-height: 1.04;
+    max-width: 88vw;
+    animation-name: season-super-bingo-in-mobile;
+  }
+  .race-super-bingo__subtitle,
+  .season-super-bingo__subtitle {
+    font-size: clamp(10px, 3.7vw, 13px);
+    letter-spacing: .08em;
+    max-width: 88vw;
+  }
+}
+
+@keyframes season-super-bingo-in-mobile {
+  0% {
+    transform: translateY(10px) scale(.82);
+    opacity: 0;
+    filter: blur(3px);
+  }
+  35% {
+    transform: translateY(0) scale(1.02);
+    opacity: 1;
+    filter: blur(0);
+  }
+  65% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-3px) scale(.97);
+    opacity: 0;
+  }
 }
 
 /* ── Race info tooltip (hover) ────────────────────────────────────────────── */
