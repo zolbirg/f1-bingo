@@ -9,12 +9,25 @@ import {
   GoogleAuthProvider,
   signOut,
 } from 'https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js';
+import {
+  getFirestore,
+  doc,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+} from 'https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
 // ── Firebase init ─────────────────────────────────────────────────────────
 const app       = initializeApp(firebaseConfig);
 const auth      = getAuth(app);
+const db        = getFirestore(app);
 const gProvider = new GoogleAuthProvider();
+
+// ── Shared events config (admin-controlled) ───────────────────────────────
+// Это глобальная конфигурация событий бинго. Изменения администратора
+// должны быть видны всем пользователям.
+const EVENTS_CONFIG_DOC_REF = doc(db, 'config', 'f1bingoEvents');
 
 // ── Default events ────────────────────────────────────────────────────────
 const DEFAULT_EVENTS = [
@@ -82,7 +95,10 @@ const DEFAULT_EVENTS = [
 
 // ── Admin access ─────────────────────────────────────────────────────────
 const ADMIN_EMAIL = 'zolbirgwood@gmail.com';
-const isAdmin = () => auth.currentUser?.email === ADMIN_EMAIL;
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+const isAdmin = () => normalizeEmail(auth.currentUser?.email) === normalizeEmail(ADMIN_EMAIL);
 
 // ── Event object helpers ──────────────────────────────────────────────────
 function toEventObj(e) {
@@ -108,6 +124,8 @@ const state = {
   uid:          null,
   playerName:   '',
   events:       [],
+  eventsConfigVersion: 0,
+  eventsConfigVersionUsedRace: 0,
   boardEvents:  [],
   checked:      [],
   sessionScore: 0,
@@ -127,7 +145,148 @@ const seasonState = {
   totalGames:   0,
   totalBingos:  0,
   bingoLines:   [],
+  eventsConfigVersionUsedSeason: 0,
 };
+
+// ── Events config syncing ─────────────────────────────────────────────────
+let eventsConfigLoaded = false;
+let eventsConfigDocExists = false;
+let didMigrateLegacyEvents = false;
+let legacyEventsFromLocalStorage = null;
+
+function isAdminPanelOpen() {
+  const overlay = document.getElementById('adminOverlay');
+  return overlay && !overlay.classList.contains('hidden');
+}
+
+// ── Admin draft & UI state ──────────────────────────────────────────────
+let adminDraftEvents = null; // редактируемый в админке массив
+let adminDirty       = false; // есть несохраненные изменения
+let adminSaving      = false; // идет запись в Firestore
+let adminSearchQuery = '';    // текст поиска
+let adminSaveStatusTimer = null;
+
+function cloneEventsArray(events) {
+  return (events || []).map(e => ({ ...e }));
+}
+
+function ensureAdminDraftEvents() {
+  if (adminDraftEvents) return;
+  const base = state.events?.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
+  adminDraftEvents = cloneEventsArray(base);
+}
+
+function getAdminEventsForView() {
+  if (adminDraftEvents?.length) return adminDraftEvents;
+  return state.events?.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
+}
+
+function updateAdminSaveBtnState() {
+  const btn = document.getElementById('adminSaveBtn');
+  if (!btn) return;
+  btn.disabled = !adminDirty || adminSaving;
+  btn.textContent = adminSaving ? 'Сохранение...' : 'Сохранить';
+}
+
+function setAdminSaveStatus(message = '', type = '') {
+  const statusEl = document.getElementById('adminSaveStatus');
+  if (!statusEl) return;
+
+  if (adminSaveStatusTimer) {
+    clearTimeout(adminSaveStatusTimer);
+    adminSaveStatusTimer = null;
+  }
+
+  statusEl.classList.add('hidden');
+  statusEl.classList.remove('admin-save-status--success', 'admin-save-status--error');
+
+  if (!message) return;
+
+  statusEl.textContent = message;
+  if (type === 'success') statusEl.classList.add('admin-save-status--success');
+  if (type === 'error') statusEl.classList.add('admin-save-status--error');
+  statusEl.classList.remove('hidden');
+
+  if (type === 'success') {
+    adminSaveStatusTimer = setTimeout(() => {
+      setAdminSaveStatus();
+    }, 2500);
+  }
+}
+
+// Поиск по “событиям” (то, что редактирует админка)
+const adminSearchInput = document.getElementById('adminSearchInput');
+if (adminSearchInput) {
+  adminSearchInput.addEventListener('input', () => {
+    adminSearchQuery = adminSearchInput.value || '';
+    renderAdminEvents();
+  });
+}
+
+function maybeRefreshActiveBoardOnConfigChange() {
+  if (currentMode === 'race') {
+    const appPage = document.getElementById('appPage');
+    if (appPage && !appPage.classList.contains('hidden')) showApp();
+  }
+  if (currentMode === 'season') {
+    const seasonPage = document.getElementById('seasonPage');
+    if (seasonPage && !seasonPage.classList.contains('hidden')) showSeasonGame();
+  }
+}
+
+function maybeReRenderAdminEvents() {
+  if (!isAdminPanelOpen()) return;
+  if (!isAdmin()) return;
+  // Если пользователь не редактирует в данный момент — синхронизируем черновик с актуальным состоянием.
+  if (!adminDraftEvents || !adminDirty) {
+    const base = state.events?.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
+    adminDraftEvents = cloneEventsArray(base);
+  }
+  renderAdminEvents();
+}
+
+function maybeMigrateLegacyEvents() {
+  if (didMigrateLegacyEvents) return;
+  if (!isAdmin()) return;
+  if (!eventsConfigLoaded) return;
+  if (eventsConfigDocExists) return;
+  if (!legacyEventsFromLocalStorage?.length) return;
+
+  didMigrateLegacyEvents = true;
+  const normalized = normalizeEvents(legacyEventsFromLocalStorage);
+  setDoc(EVENTS_CONFIG_DOC_REF, {
+    events: normalized,
+    version: 1,
+    updatedAt: serverTimestamp(),
+  }).catch(err => {
+    console.error('Failed to migrate legacy events config:', err);
+  });
+}
+
+onSnapshot(EVENTS_CONFIG_DOC_REF, snap => {
+  const prevVersion = state.eventsConfigVersion;
+
+  if (!snap.exists()) {
+    eventsConfigDocExists = false;
+    state.eventsConfigVersion = 0;
+    // Фоллбек: пока админ не создал конфиг в Firestore — используем локальные дефолты.
+    state.events = normalizeEvents(DEFAULT_EVENTS);
+  } else {
+    eventsConfigDocExists = true;
+    const data = snap.data() || {};
+    state.eventsConfigVersion = Number(data.version ?? 0) || 0;
+    const events = Array.isArray(data.events) && data.events.length ? data.events : DEFAULT_EVENTS;
+    state.events = normalizeEvents(events);
+  }
+
+  eventsConfigLoaded = true;
+
+  if (state.eventsConfigVersion !== prevVersion) {
+    maybeRefreshActiveBoardOnConfigChange();
+  }
+  maybeReRenderAdminEvents();
+  maybeMigrateLegacyEvents();
+});
 
 // ── Storage keys ──────────────────────────────────────────────────────────
 const storageKey       = () => `f1bingo_v2_${state.uid || 'guest'}`;
@@ -139,11 +298,11 @@ function loadStorage() {
     const raw = localStorage.getItem(storageKey());
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (d.events?.length) {
-      state.events = normalizeEvents(d.events);
-      const existingTexts = new Set(state.events.map(e => e.text));
-      const missing = DEFAULT_EVENTS.filter(e => !existingTexts.has(typeof e === 'string' ? e : e.text));
-      if (missing.length) state.events = [...state.events, ...normalizeEvents(missing)];
+    if (d.events?.length) legacyEventsFromLocalStorage = d.events;
+    if (typeof d.eventsConfigVersionUsedRace === 'number') {
+      state.eventsConfigVersionUsedRace = d.eventsConfigVersionUsedRace;
+    } else if (d.eventsConfigVersionUsedRace != null) {
+      state.eventsConfigVersionUsedRace = Number(d.eventsConfigVersionUsedRace) || 0;
     }
     if (d.recordScore)          state.recordScore  = d.recordScore;
     if (d.totalGames)           state.totalGames   = d.totalGames;
@@ -157,7 +316,6 @@ function loadStorage() {
 
 function saveStorage() {
   localStorage.setItem(storageKey(), JSON.stringify({
-    events:       state.events,
     recordScore:  state.recordScore,
     totalGames:   state.totalGames,
     totalBingos:  state.totalBingos,
@@ -165,6 +323,7 @@ function saveStorage() {
     boardEvents:  state.boardEvents,
     checked:      state.checked,
     sessionScore: state.sessionScore,
+    eventsConfigVersionUsedRace: state.eventsConfigVersionUsedRace,
   }));
 }
 
@@ -180,6 +339,11 @@ function loadSeasonStorage() {
     if (d.boardEvents?.length)  seasonState.boardEvents  = d.boardEvents;
     if (d.checked?.length)      seasonState.checked      = d.checked.map(v => typeof v === 'boolean' ? (v ? 1 : 0) : (v ?? 0));
     if (d.sessionScore)         seasonState.sessionScore = d.sessionScore;
+    if (typeof d.eventsConfigVersionUsedSeason === 'number') {
+      seasonState.eventsConfigVersionUsedSeason = d.eventsConfigVersionUsedSeason;
+    } else if (d.eventsConfigVersionUsedSeason != null) {
+      seasonState.eventsConfigVersionUsedSeason = Number(d.eventsConfigVersionUsedSeason) || 0;
+    }
   } catch (_) {}
 }
 
@@ -191,6 +355,7 @@ function saveSeasonStorage() {
     boardEvents:  seasonState.boardEvents,
     checked:      seasonState.checked,
     sessionScore: seasonState.sessionScore,
+    eventsConfigVersionUsedSeason: seasonState.eventsConfigVersionUsedSeason,
   }));
 }
 
@@ -204,24 +369,35 @@ function shuffle(arr) {
   return a;
 }
 
+function fillToSize(pool, size) {
+  if (!Array.isArray(pool) || pool.length === 0) return [];
+  const out = [];
+  while (out.length < size) {
+    out.push(...shuffle(pool));
+  }
+  return out.slice(0, size);
+}
+
 function pick9() {
   const base = state.events.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
-  const racePool = base.filter(e => e.forRace);
-  const texts = new Set(racePool.map(e => e.text));
-  const pool = racePool.length >= 9
-    ? racePool
-    : [...racePool, ...DEFAULT_EVENTS.filter(d => !texts.has(d)).map(toEventObj)];
-  return shuffle(pool).slice(0, 9).map(e => e.text);
+  let racePool = base.filter(e => e.forRace);
+  if (racePool.length === 0) {
+    // Крайний случай: если в админке выключили всё для гонок,
+    // иначе карточка не соберётся вообще.
+    console.warn('pick9: no events enabled for race; falling back to all events');
+    racePool = base;
+  }
+  return fillToSize(racePool, 9).map(e => e.text);
 }
 
 function pick50() {
   const base = state.events.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
-  const seasonPool = base.filter(e => e.forSeason);
-  const texts = new Set(seasonPool.map(e => e.text));
-  const pool = seasonPool.length >= 50
-    ? seasonPool
-    : [...seasonPool, ...DEFAULT_EVENTS.filter(d => !texts.has(d)).map(toEventObj)];
-  return shuffle(pool).slice(0, 50).map(e => e.text);
+  let seasonPool = base.filter(e => e.forSeason);
+  if (seasonPool.length === 0) {
+    console.warn('pick50: no events enabled for season; falling back to all events');
+    seasonPool = base;
+  }
+  return fillToSize(seasonPool, 50).map(e => e.text);
 }
 
 // ── Win lines ─────────────────────────────────────────────────────────────
@@ -250,18 +426,45 @@ function getEventsPool() {
   return state.events.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
 }
 
-function getCellCheckboxCount(text) {
-  const ev = getEventsPool().find(e => e.text === text);
-  return ev?.checkboxCount ?? 0;
+function normalizeEventText(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
-function getCellRequired(text) {
-  const count = getCellCheckboxCount(text);
+function getCellCheckboxCount(text, mode) {
+  const pool = getEventsPool();
+  const eventsWithSameText = pool.filter(e => e.text === text);
+  const normalizedText = normalizeEventText(text);
+  const normalizedMatches = eventsWithSameText.length
+    ? eventsWithSameText
+    : pool.filter(e => normalizeEventText(e.text) === normalizedText);
+
+  // Основная ветка: берём только события, разрешенные для текущего режима.
+  // Это важно при дубликатах одного `text` в конфиге.
+  const modeFiltered = mode
+    ? normalizedMatches.filter(e => Boolean(e[mode]))
+    : normalizedMatches;
+
+  // Если по режиму ничего не нашлось, откатываемся на любые совпадения по `text`.
+  const candidates = modeFiltered.length ? modeFiltered : normalizedMatches;
+
+  return candidates.reduce(
+    (max, e) => Math.max(max, Number(e.checkboxCount ?? 0)),
+    0
+  );
+}
+
+function getCellRequired(text, mode) {
+  const count = getCellCheckboxCount(text, mode);
   return count > 0 ? count : 1;
 }
 
-function buildCompleted(boardEvents, checked) {
-  return boardEvents.map((text, i) => (checked[i] || 0) >= getCellRequired(text));
+function buildCompleted(boardEvents, checked, mode) {
+  return boardEvents.map((text, i) => (checked[i] || 0) >= getCellRequired(text, mode));
 }
 
 // ── Auth state observer ───────────────────────────────────────────────────
@@ -271,6 +474,7 @@ onAuthStateChanged(auth, user => {
     state.playerName = user.displayName || user.email?.split('@')[0] || 'Пилот';
     loadStorage();
     loadSeasonStorage();
+    maybeMigrateLegacyEvents();
     closeAuthModal();
     showModePage();
     if (pendingModeAfterAuth) {
@@ -351,13 +555,19 @@ window.selectMode = function(mode) {
 };
 
 function showApp() {
-  if (!state.boardEvents.length || state.boardEvents.length < 9) {
+  const needsRebuild =
+    state.eventsConfigVersionUsedRace !== state.eventsConfigVersion ||
+    !state.boardEvents.length ||
+    state.boardEvents.length < 9;
+
+  if (needsRebuild) {
     state.boardEvents  = pick9();
     state.checked      = Array(9).fill(0);
     state.sessionScore = 0;
     state.bingoLines   = [];
+    state.eventsConfigVersionUsedRace = state.eventsConfigVersion;
   } else {
-    state.bingoLines = calcBingoLines(buildCompleted(state.boardEvents, state.checked));
+    state.bingoLines = calcBingoLines(buildCompleted(state.boardEvents, state.checked, 'forRace'));
   }
 
   hideAllPages();
@@ -370,13 +580,19 @@ function showApp() {
 }
 
 function showSeasonGame() {
-  if (!seasonState.boardEvents.length || seasonState.boardEvents.length < 50) {
+  const needsRebuild =
+    seasonState.eventsConfigVersionUsedSeason !== state.eventsConfigVersion ||
+    !seasonState.boardEvents.length ||
+    seasonState.boardEvents.length < 50;
+
+  if (needsRebuild) {
     seasonState.boardEvents  = pick50();
     seasonState.checked      = Array(50).fill(0);
     seasonState.sessionScore = 0;
     seasonState.bingoLines   = [];
+    seasonState.eventsConfigVersionUsedSeason = state.eventsConfigVersion;
   } else {
-    seasonState.bingoLines = calcSeasonBingoLines(buildCompleted(seasonState.boardEvents, seasonState.checked));
+    seasonState.bingoLines = calcSeasonBingoLines(buildCompleted(seasonState.boardEvents, seasonState.checked, 'forSeason'));
   }
 
   hideAllPages();
@@ -634,15 +850,15 @@ function scheduleRaceSuperBingoCountUpdate() {
 }
 
 window.toggleCell = function(idx) {
-  const prevCompleted = buildCompleted(state.boardEvents, state.checked);
+  const prevCompleted = buildCompleted(state.boardEvents, state.checked, 'forRace');
   const wasAllCompleted = prevCompleted.length > 0 && prevCompleted.every(Boolean);
 
-  const required = getCellRequired(state.boardEvents[idx]);
+  const required = getCellRequired(state.boardEvents[idx], 'forRace');
   const current  = state.checked[idx] || 0;
 
   state.checked[idx] = current >= required ? 0 : current + 1;
 
-  const completed    = buildCompleted(state.boardEvents, state.checked);
+  const completed    = buildCompleted(state.boardEvents, state.checked, 'forRace');
   const count        = completed.filter(Boolean).length;
   const isAllCompleted = completed.length > 0 && completed.every(Boolean);
   state.sessionScore = count;
@@ -674,6 +890,7 @@ window.resetGame = function() {
   state.checked      = Array(9).fill(0);
   state.sessionScore = 0;
   state.bingoLines   = [];
+  state.eventsConfigVersionUsedRace = state.eventsConfigVersion;
 
   document.getElementById('bingoOverlay').classList.add('hidden');
   document.getElementById('raceSuperBingoFx')?.classList.add('hidden');
@@ -700,7 +917,7 @@ function renderBoard() {
   const winCells = new Set(state.bingoLines.flat());
 
   state.boardEvents.forEach((text, idx) => {
-    const required  = getCellRequired(text);
+    const required  = getCellRequired(text, 'forRace');
     const progress  = state.checked[idx] || 0;
     const completed = progress >= required;
 
@@ -714,7 +931,7 @@ function renderBoard() {
     textEl.textContent = text;
     cell.appendChild(textEl);
 
-    const cbCount = getCellCheckboxCount(text);
+    const cbCount = getCellCheckboxCount(text, 'forRace');
     if (cbCount > 0) {
       const row = document.createElement('div');
       row.className = 'cell__checkboxes';
@@ -884,15 +1101,15 @@ window.addEventListener('resize', () => {
 });
 
 window.toggleSeasonCell = function(idx) {
-  const prevCompleted = buildCompleted(seasonState.boardEvents, seasonState.checked);
+  const prevCompleted = buildCompleted(seasonState.boardEvents, seasonState.checked, 'forSeason');
   const wasAllCompleted = prevCompleted.length > 0 && prevCompleted.every(Boolean);
 
-  const required = getCellRequired(seasonState.boardEvents[idx]);
+  const required = getCellRequired(seasonState.boardEvents[idx], 'forSeason');
   const current  = seasonState.checked[idx] || 0;
 
   seasonState.checked[idx] = current >= required ? 0 : current + 1;
 
-  const completed          = buildCompleted(seasonState.boardEvents, seasonState.checked);
+  const completed          = buildCompleted(seasonState.boardEvents, seasonState.checked, 'forSeason');
   const count              = completed.filter(Boolean).length;
   const isAllCompleted     = completed.length > 0 && completed.every(Boolean);
   seasonState.sessionScore = count;
@@ -934,7 +1151,7 @@ function renderSeasonBoard() {
   const winCells = new Set(seasonState.bingoLines.flat());
 
   seasonState.boardEvents.forEach((text, idx) => {
-    const required  = getCellRequired(text);
+    const required  = getCellRequired(text, 'forSeason');
     const progress  = seasonState.checked[idx] || 0;
     const completed = progress >= required;
 
@@ -948,7 +1165,7 @@ function renderSeasonBoard() {
     textEl.textContent = text;
     cell.appendChild(textEl);
 
-    const cbCount = getCellCheckboxCount(text);
+    const cbCount = getCellCheckboxCount(text, 'forSeason');
     if (cbCount > 0) {
       const row = document.createElement('div');
       row.className = 'cell__checkboxes';
@@ -983,64 +1200,170 @@ window.toggleAdmin = function() {
   if (!isAdmin()) return;
   const overlay = document.getElementById('adminOverlay');
   const hidden  = overlay.classList.toggle('hidden');
-  if (!hidden) renderAdminEvents();
+
+  if (!hidden) {
+    // Открыли админку — стартуем с актуального снимка, вносим изменения в черновик.
+    const base = state.events?.length ? state.events : normalizeEvents(DEFAULT_EVENTS);
+    adminDraftEvents = cloneEventsArray(base);
+    adminDirty = false;
+    adminSaving = false;
+    adminSearchQuery = '';
+    setAdminSaveStatus();
+
+    if (adminSearchInput) adminSearchInput.value = '';
+    updateAdminSaveBtnState();
+    renderAdminEvents();
+  } else {
+    // Закрыли админку — просто выкидываем черновик.
+    adminDraftEvents = null;
+    adminDirty = false;
+    adminSaving = false;
+    adminSearchQuery = '';
+    setAdminSaveStatus();
+    updateAdminSaveBtnState();
+  }
 };
 
 function renderAdminEvents() {
-  const events = (state.events.length ? state.events : normalizeEvents(DEFAULT_EVENTS));
-  document.getElementById('adminEventsList').innerHTML = events.map((e, i) => `
+  const listEl = document.getElementById('adminEventsList');
+  if (!listEl) return;
+
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+
+  const events = getAdminEventsForView();
+  const q = adminSearchQuery.trim().toLowerCase();
+
+  const items = events
+    .map((e, originalIdx) => ({ e, originalIdx }))
+    .filter(({ e }) => !q || (e.text || '').toLowerCase().includes(q));
+
+  if (!items.length) {
+    listEl.innerHTML = `
+      <div class="admin-event-item" style="justify-content: center; color: var(--text-dim);">
+        Ничего не найдено
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = items.map(({ e, originalIdx }) => `
     <div class="admin-event-item">
-      <span class="admin-event-item__text">${e.text}</span>
+      <span class="admin-event-item__text">${escapeHtml(e.text)}</span>
       <div class="admin-event-modes">
         <label class="admin-mode-check" title="Бинго Гонки (3×3)">
-          <input type="checkbox" ${e.forRace ? 'checked' : ''} onchange="toggleEventMode(${i}, 'forRace')" />
+          <input type="checkbox" ${e.forRace ? 'checked' : ''} onchange="toggleEventMode(${originalIdx}, 'forRace')" />
           <span class="admin-mode-check__label">🏎</span>
         </label>
         <label class="admin-mode-check" title="Бинго Сезона (5×10)">
-          <input type="checkbox" ${e.forSeason ? 'checked' : ''} onchange="toggleEventMode(${i}, 'forSeason')" />
+          <input type="checkbox" ${e.forSeason ? 'checked' : ''} onchange="toggleEventMode(${originalIdx}, 'forSeason')" />
           <span class="admin-mode-check__label">🏆</span>
         </label>
       </div>
       <div class="admin-cb-count" title="Количество чекбоксов">
-        <button class="admin-cb-btn" onclick="changeCheckboxCount(${i}, -1)">−</button>
+        <button class="admin-cb-btn" onclick="changeCheckboxCount(${originalIdx}, -1)">−</button>
         <span class="admin-cb-value">${e.checkboxCount || 0}</span>
-        <button class="admin-cb-btn" onclick="changeCheckboxCount(${i}, 1)">+</button>
+        <button class="admin-cb-btn" onclick="changeCheckboxCount(${originalIdx}, 1)">+</button>
       </div>
-      <button onclick="deleteEvent(${i})" title="Удалить">×</button>
+      <button onclick="deleteEvent(${originalIdx})" title="Удалить">×</button>
     </div>
   `).join('');
 }
 
+window.saveAdminChanges = function() {
+  if (!isAdmin()) {
+    setAdminSaveStatus('Нет прав администратора для сохранения.', 'error');
+    return;
+  }
+  if (!adminDirty || adminSaving) return;
+  ensureAdminDraftEvents();
+  setAdminSaveStatus();
+
+  adminSaving = true;
+  updateAdminSaveBtnState();
+
+  persistEventsConfigToFirestore(adminDraftEvents)
+    .then(() => {
+      adminDirty = false;
+      updateAdminSaveBtnState();
+      setAdminSaveStatus('Изменения успешно сохранены.', 'success');
+    })
+    .catch(err => {
+      const code = err?.code ? ` (${err.code})` : '';
+      const details = err?.message ? `: ${err.message}` : '';
+      console.error('Persist events failed:', err);
+      setAdminSaveStatus(`Ошибка сохранения${code}${details}`, 'error');
+      alert(`Не удалось сохранить изменения${code}${details}`);
+    })
+    .finally(() => {
+      adminSaving = false;
+      updateAdminSaveBtnState();
+    });
+};
+
+function persistEventsConfigToFirestore(eventsToPersist) {
+  if (!isAdmin()) {
+    return Promise.reject(new Error(`Current user is not admin: ${auth.currentUser?.email || 'unknown'}`));
+  }
+  const nextVersion = Number(state.eventsConfigVersion || 0) + 1;
+  const base = Array.isArray(eventsToPersist) && eventsToPersist.length
+    ? eventsToPersist
+    : (state.events?.length ? state.events : normalizeEvents(DEFAULT_EVENTS));
+  const normalized = normalizeEvents(base);
+  return setDoc(EVENTS_CONFIG_DOC_REF, {
+    events: normalized,
+    version: nextVersion,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 window.changeCheckboxCount = function(idx, delta) {
-  if (!state.events.length) state.events = normalizeEvents(DEFAULT_EVENTS);
-  state.events[idx].checkboxCount = Math.max(0, (state.events[idx].checkboxCount || 0) + delta);
+  ensureAdminDraftEvents();
+  if (!adminDraftEvents[idx]) return;
+  adminDraftEvents[idx].checkboxCount = Math.max(0, (adminDraftEvents[idx].checkboxCount || 0) + delta);
+  adminDirty = true;
+  setAdminSaveStatus();
+  updateAdminSaveBtnState();
   renderAdminEvents();
-  saveStorage();
 };
 
 window.toggleEventMode = function(idx, mode) {
-  if (!state.events.length) state.events = normalizeEvents(DEFAULT_EVENTS);
-  state.events[idx][mode] = !state.events[idx][mode];
-  saveStorage();
+  ensureAdminDraftEvents();
+  if (!adminDraftEvents[idx]) return;
+  adminDraftEvents[idx][mode] = !adminDraftEvents[idx][mode];
+  adminDirty = true;
+  setAdminSaveStatus();
+  updateAdminSaveBtnState();
+  renderAdminEvents();
 };
 
 window.addEvent = function() {
   const input = document.getElementById('newEventInput');
   const text  = input.value.trim();
   if (!text) return;
-  if (!state.events.length) state.events = normalizeEvents(DEFAULT_EVENTS);
-  state.events.push({ text, forRace: true, forSeason: true, checkboxCount: 0 });
+
+  ensureAdminDraftEvents();
+  adminDraftEvents.push({ text, forRace: true, forSeason: true, checkboxCount: 0 });
   input.value = '';
+  adminDirty = true;
+  setAdminSaveStatus();
+  updateAdminSaveBtnState();
   renderAdminEvents();
-  saveStorage();
 };
 
 window.deleteEvent = function(idx) {
-  if (!state.events.length) state.events = normalizeEvents(DEFAULT_EVENTS);
-  if (state.events.length <= 9) { alert('Необходимо минимум 9 событий.'); return; }
-  state.events.splice(idx, 1);
+  ensureAdminDraftEvents();
+  if (adminDraftEvents.length <= 9) { alert('Необходимо минимум 9 событий.'); return; }
+  adminDraftEvents.splice(idx, 1);
+  adminDirty = true;
+  setAdminSaveStatus();
+  updateAdminSaveBtnState();
   renderAdminEvents();
-  saveStorage();
 };
 
 // ── Race stats ────────────────────────────────────────────────────────────

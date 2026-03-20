@@ -666,7 +666,14 @@
     <div class="modal modal--wide modal--admin">
       <h2 class="modal__title">Панель администратора</h2>
       <p class="modal__subtitle">Управление событиями бинго</p>
+      <div class="admin-search">
+        <input class="modal__input" id="adminSearchInput" type="text" placeholder="Поиск по событиям..." maxlength="80" />
+      </div>
       <div id="adminEventsList" class="admin-events"></div>
+      <div class="admin-save">
+        <button class="btn btn--primary" id="adminSaveBtn" onclick="saveAdminChanges()" disabled>Сохранить</button>
+      </div>
+      <p id="adminSaveStatus" class="admin-save-status hidden" role="status" aria-live="polite"></p>
       <div class="admin-add">
         <input class="modal__input" id="newEventInput" type="text" placeholder="Новое событие..." maxlength="80" />
         <button class="btn btn--primary" onclick="addEvent()">Добавить</button>

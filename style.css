@@ -719,6 +719,32 @@ body {
 .bingo-win__subtitle { font-size: 14px; color: var(--text-sec); margin-bottom: 8px; }
 
 /* ── Admin panel ──────────────────────────────────────────────────── */
+.admin-search {
+  display: flex;
+  gap: 10px;
+}
+.admin-search .modal__input { flex: 1; }
+
+.admin-save {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-save-status {
+  min-height: 18px;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.admin-save-status--success {
+  color: #4ecb71;
+}
+
+.admin-save-status--error {
+  color: var(--accent);
+}
+
 .admin-events {
   display: flex;
   flex-direction: column;

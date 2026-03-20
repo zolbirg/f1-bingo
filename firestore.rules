@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Глобальная конфигурация событий бинго.
+    match /config/{docId} {
+      // Читать конфиг могут все пользователи (и даже неавторизованные, если это нужно).
+      allow read: if true;
+
+      // Писать/обновлять конфиг может только админ (по email из Firebase Auth).
+      allow write: if request.auth != null
+        && request.auth.token.email == 'zolbirgwood@gmail.com';
+    }
+  }
+}
+
