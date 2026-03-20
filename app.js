@@ -673,6 +673,11 @@ window.handleEmailRegister = async function(e) {
   const name     = document.getElementById('regName').value.trim();
   const email    = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
+  const consent  = document.getElementById('regConsent')?.checked;
+  if (!consent) {
+    setAuthError('Для регистрации нужно принять Условия и Политику конфиденциальности.');
+    return;
+  }
   setButtonLoading('btnRegister', true);
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
