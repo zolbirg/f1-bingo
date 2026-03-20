@@ -148,6 +148,29 @@ const seasonState = {
   eventsConfigVersionUsedSeason: 0,
 };
 
+function resetRaceUserState() {
+  state.recordScore = 0;
+  state.totalGames = 0;
+  state.totalBingos = 0;
+  state.totalSuperBingos = 0;
+  state.boardEvents = [];
+  state.checked = [];
+  state.sessionScore = 0;
+  state.bingoLines = [];
+  state.eventsConfigVersionUsedRace = 0;
+}
+
+function resetSeasonUserState() {
+  seasonState.recordScore = 0;
+  seasonState.totalGames = 0;
+  seasonState.totalBingos = 0;
+  seasonState.boardEvents = [];
+  seasonState.checked = [];
+  seasonState.sessionScore = 0;
+  seasonState.bingoLines = [];
+  seasonState.eventsConfigVersionUsedSeason = 0;
+}
+
 // ── Events config syncing ─────────────────────────────────────────────────
 let eventsConfigLoaded = false;
 let eventsConfigDocExists = false;
@@ -470,6 +493,8 @@ function buildCompleted(boardEvents, checked, mode) {
 // ── Auth state observer ───────────────────────────────────────────────────
 onAuthStateChanged(auth, user => {
   if (user) {
+    resetRaceUserState();
+    resetSeasonUserState();
     state.uid        = user.uid;
     state.playerName = user.displayName || user.email?.split('@')[0] || 'Пилот';
     loadStorage();
@@ -487,6 +512,8 @@ onAuthStateChanged(auth, user => {
       }
     }
   } else {
+    resetRaceUserState();
+    resetSeasonUserState();
     state.uid = null;
     state.playerName = 'Гость';
     showModePage();
